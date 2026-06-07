@@ -59,6 +59,7 @@ import { buildAgentUpdatePatch, type AgentConfigOverlay } from "../lib/agent-con
 import { useAdapterCapabilities } from "../adapters/use-adapter-capabilities";
 import { filterAcpxModelsByAgent } from "../lib/acpx-model-filter";
 import {
+  DEFAULT_CUSTOM_OPENAI_COMPATIBLE_BASE_URL,
   OLLAMA_OPENAI_BASE_URL,
   applyLocalModelEndpoint,
   inferLocalModelProvider,
@@ -1426,7 +1427,7 @@ function LocalModelEndpointFields({
   function updateProvider(nextProvider: LocalModelEndpointProvider) {
     onChange(applyLocalModelEndpoint(env, {
       provider: nextProvider,
-      baseUrl,
+      baseUrl: nextProvider === "custom" ? baseUrl || DEFAULT_CUSTOM_OPENAI_COMPATIBLE_BASE_URL : baseUrl,
     }));
   }
 
@@ -1469,7 +1470,7 @@ function LocalModelEndpointFields({
               immediate
               disabled={provider === "ollama"}
               className={cn(inputClass, provider === "ollama" && "opacity-70")}
-              placeholder="http://localhost:8080/v1"
+              placeholder={DEFAULT_CUSTOM_OPENAI_COMPATIBLE_BASE_URL}
             />
           </Field>
           <Field label="API key" hint={help.localModelApiKey}>

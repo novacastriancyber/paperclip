@@ -2,14 +2,28 @@ import type { AdapterModel } from "./types.js";
 import { models as codexFallbackModels } from "@paperclipai/adapter-codex-local";
 import { readConfigFile } from "../config-file.js";
 
-const OPENAI_MODELS_ENDPOINT = "https://api.openai.com/v1/models";
+const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const OPENAI_MODELS_TIMEOUT_MS = 5000;
 const OPENAI_MODELS_CACHE_TTL_MS = 60_000;
 
-let cached: { keyFingerprint: string; expiresAt: number; models: AdapterModel[] } | null = null;
+let cached: { cacheKey: string; expiresAt: number; models: AdapterModel[] } | null = null;
 
-function fingerprint(apiKey: string): string {
-  return `${apiKey.length}:${apiKey.slice(-6)}`;
+function fingerprint(input: { apiKey: string | null; baseUrl: string }): string {
+  const apiKey = input.apiKey ?? "";
+  return `${input.baseUrl}|${apiKey.length}:${apiKey.slice(-6)}`;
+}
+
+function normalizeOpenAiBaseUrl(baseUrl: string | undefined | null): string {
+  const trimmed = baseUrl?.trim();
+  return (trimmed && trimmed.length > 0 ? trimmed : DEFAULT_OPENAI_BASE_URL).replace(/\/+$/, "");
+}
+
+function isDefaultOpenAiBaseUrl(baseUrl: string): boolean {
+  return baseUrl === DEFAULT_OPENAI_BASE_URL;
+}
+
+function openAiModelsEndpoint(baseUrl: string): string {
+  return `${baseUrl}/models`;
 }
 
 function dedupeModels(models: AdapterModel[]): AdapterModel[] {
@@ -31,24 +45,31 @@ function mergedWithFallback(models: AdapterModel[]): AdapterModel[] {
   ]).sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true, sensitivity: "base" }));
 }
 
-function resolveOpenAiApiKey(): string | null {
+function resolveOpenAiModelDiscoveryConfig(): { apiKey: string | null; baseUrl: string } {
   const envKey = process.env.OPENAI_API_KEY?.trim();
-  if (envKey) return envKey;
+  const envBaseUrl = process.env.OPENAI_BASE_URL?.trim()
+    || process.env.OPENAI_API_BASE?.trim()
+    || process.env.OPENAI_API_BASE_URL?.trim();
 
   const config = readConfigFile();
-  if (config?.llm?.provider !== "openai") return null;
-  const configKey = config.llm.apiKey?.trim();
-  return configKey && configKey.length > 0 ? configKey : null;
+  const configKey = config?.llm?.provider === "openai" ? config.llm.apiKey?.trim() : undefined;
+  const configBaseUrl = config?.llm?.provider === "openai" ? config.llm.baseUrl?.trim() : undefined;
+  const apiKey = envKey || configKey || null;
+
+  return {
+    apiKey: apiKey && apiKey.length > 0 ? apiKey : null,
+    baseUrl: normalizeOpenAiBaseUrl(envBaseUrl || configBaseUrl),
+  };
 }
 
-async function fetchOpenAiModels(apiKey: string): Promise<AdapterModel[]> {
+async function fetchOpenAiModels(input: { apiKey: string | null; baseUrl: string }): Promise<AdapterModel[]> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), OPENAI_MODELS_TIMEOUT_MS);
+  const headers: Record<string, string> = {};
+  if (input.apiKey) headers.Authorization = `Bearer ${input.apiKey}`;
   try {
-    const response = await fetch(OPENAI_MODELS_ENDPOINT, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
+    const response = await fetch(openAiModelsEndpoint(input.baseUrl), {
+      headers,
       signal: controller.signal,
     });
     if (!response.ok) return [];
@@ -72,28 +93,28 @@ async function fetchOpenAiModels(apiKey: string): Promise<AdapterModel[]> {
 
 async function loadCodexModels(options?: { forceRefresh?: boolean }): Promise<AdapterModel[]> {
   const forceRefresh = options?.forceRefresh === true;
-  const apiKey = resolveOpenAiApiKey();
+  const discovery = resolveOpenAiModelDiscoveryConfig();
   const fallback = dedupeModels(codexFallbackModels);
-  if (!apiKey) return fallback;
+  if (!discovery.apiKey && isDefaultOpenAiBaseUrl(discovery.baseUrl)) return fallback;
 
   const now = Date.now();
-  const keyFingerprint = fingerprint(apiKey);
-  if (!forceRefresh && cached && cached.keyFingerprint === keyFingerprint && cached.expiresAt > now) {
+  const cacheKey = fingerprint(discovery);
+  if (!forceRefresh && cached && cached.cacheKey === cacheKey && cached.expiresAt > now) {
     return cached.models;
   }
 
-  const fetched = await fetchOpenAiModels(apiKey);
+  const fetched = await fetchOpenAiModels(discovery);
   if (fetched.length > 0) {
     const merged = mergedWithFallback(fetched);
     cached = {
-      keyFingerprint,
+      cacheKey,
       expiresAt: now + OPENAI_MODELS_CACHE_TTL_MS,
       models: merged,
     };
     return merged;
   }
 
-  if (cached && cached.keyFingerprint === keyFingerprint && cached.models.length > 0) {
+  if (cached && cached.cacheKey === cacheKey && cached.models.length > 0) {
     return cached.models;
   }
 

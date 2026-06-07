@@ -1,6 +1,13 @@
 import type { PaperclipConfig } from "../config/schema.js";
 import type { CheckResult } from "./index.js";
 
+const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+
+function normalizeOpenAiBaseUrl(baseUrl: string | undefined): string {
+  const trimmed = baseUrl?.trim();
+  return (trimmed && trimmed.length > 0 ? trimmed : DEFAULT_OPENAI_BASE_URL).replace(/\/+$/, "");
+}
+
 export async function llmCheck(config: PaperclipConfig): Promise<CheckResult> {
   if (!config.llm) {
     return {
@@ -10,7 +17,7 @@ export async function llmCheck(config: PaperclipConfig): Promise<CheckResult> {
     };
   }
 
-  if (!config.llm.apiKey) {
+  if (!config.llm.apiKey && !(config.llm.provider === "openai" && config.llm.baseUrl)) {
     return {
       name: "LLM provider",
       status: "pass",
@@ -20,10 +27,11 @@ export async function llmCheck(config: PaperclipConfig): Promise<CheckResult> {
 
   try {
     if (config.llm.provider === "claude") {
+      const apiKey = config.llm.apiKey ?? "";
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
-          "x-api-key": config.llm.apiKey,
+          "x-api-key": apiKey,
           "anthropic-version": "2023-06-01",
           "content-type": "application/json",
         },
@@ -51,11 +59,16 @@ export async function llmCheck(config: PaperclipConfig): Promise<CheckResult> {
         message: `Claude API returned status ${res.status}`,
       };
     } else {
-      const res = await fetch("https://api.openai.com/v1/models", {
-        headers: { Authorization: `Bearer ${config.llm.apiKey}` },
-      });
+      const baseUrl = normalizeOpenAiBaseUrl(config.llm.baseUrl);
+      const headers: Record<string, string> = {};
+      if (config.llm.apiKey) headers.Authorization = `Bearer ${config.llm.apiKey}`;
+      const res = await fetch(`${baseUrl}/models`, { headers });
       if (res.ok) {
-        return { name: "LLM provider", status: "pass", message: "OpenAI API key is valid" };
+        return {
+          name: "LLM provider",
+          status: "pass",
+          message: config.llm.baseUrl ? "OpenAI-compatible endpoint is reachable" : "OpenAI API key is valid",
+        };
       }
       if (res.status === 401) {
         return {
@@ -69,14 +82,14 @@ export async function llmCheck(config: PaperclipConfig): Promise<CheckResult> {
       return {
         name: "LLM provider",
         status: "warn",
-        message: `OpenAI API returned status ${res.status}`,
+        message: `${config.llm.baseUrl ? "OpenAI-compatible endpoint" : "OpenAI API"} returned status ${res.status}`,
       };
     }
   } catch {
     return {
       name: "LLM provider",
       status: "warn",
-      message: "Could not reach API to validate key",
+      message: "Could not reach LLM API to validate configuration",
     };
   }
 }

@@ -7,7 +7,12 @@ import { models as opencodeFallbackModels } from "@paperclipai/adapter-opencode-
 import { resetOpenCodeModelsCacheForTests } from "@paperclipai/adapter-opencode-local/server";
 import { listAdapterModels, listServerAdapters, refreshAdapterModels } from "../adapters/index.js";
 import { resetCodexModelsCacheForTests } from "../adapters/codex-models.js";
+import { readConfigFile } from "../config-file.js";
 import { resetCursorModelsCacheForTests, setCursorModelsRunnerForTests } from "../adapters/cursor-models.js";
+
+vi.mock("../config-file.js", () => ({
+  readConfigFile: vi.fn(() => null),
+}));
 
 vi.mock("acpx/runtime", () => ({
   createAcpRuntime: vi.fn(),
@@ -30,6 +35,7 @@ describe("adapter model listing", () => {
     setCursorModelsRunnerForTests(null);
     resetOpenCodeModelsCacheForTests();
     vi.restoreAllMocks();
+    vi.mocked(readConfigFile).mockReturnValue(null);
   });
 
   it("returns an empty list for unknown adapters", async () => {
@@ -137,6 +143,33 @@ describe("adapter model listing", () => {
     expect(first).toEqual(second);
     expect(first.some((model) => model.id === "gpt-5-pro")).toBe(true);
     expect(first.some((model) => model.id === "codex-mini-latest")).toBe(true);
+  });
+
+  it("uses configured OpenAI-compatible base URL for codex model discovery", async () => {
+    vi.mocked(readConfigFile).mockReturnValue({
+      llm: {
+        provider: "openai",
+        baseUrl: "http://localhost:3001/v1",
+        chatCompletionsPath: "/v1/chat/completions",
+        responsesPath: "/v1/responses",
+        embeddingsPath: "/v1/embeddings",
+        embeddingModel: "auto",
+      },
+    } as ReturnType<typeof readConfigFile>);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [{ id: "local-coder" }],
+      }),
+    } as Response);
+
+    const models = await listAdapterModels("codex_local");
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://localhost:3001/v1/models",
+      expect.objectContaining({ headers: {} }),
+    );
+    expect(models.some((model) => model.id === "local-coder")).toBe(true);
   });
 
   it("refreshes cached codex models on demand", async () => {

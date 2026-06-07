@@ -3,6 +3,7 @@ import type { EnvBinding } from "@paperclipai/shared";
 export type LocalModelEndpointProvider = "none" | "ollama" | "custom";
 
 export const OLLAMA_OPENAI_BASE_URL = "http://localhost:11434/v1";
+export const DEFAULT_CUSTOM_OPENAI_COMPATIBLE_BASE_URL = "http://localhost:3001/v1";
 
 const LOCAL_MODEL_PLACEHOLDER_API_KEYS = new Set(["ollama", "local", "freellm"]);
 

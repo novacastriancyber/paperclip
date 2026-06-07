@@ -58,6 +58,12 @@ type OnboardDefaults = Pick<PaperclipConfig, "database" | "logging" | "server" |
 
 const TAILNET_BIND_WARNING =
   "No Tailscale address was detected during setup. The saved config will stay on loopback until Tailscale is available or PAPERCLIP_TAILNET_BIND_HOST is set.";
+const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+
+function normalizeOpenAiBaseUrl(baseUrl: string | undefined): string {
+  const trimmed = baseUrl?.trim();
+  return (trimmed && trimmed.length > 0 ? trimmed : DEFAULT_OPENAI_BASE_URL).replace(/\/+$/, "");
+}
 
 const ONBOARD_ENV_KEYS = [
   "PAPERCLIP_PUBLIC_URL",
@@ -504,15 +510,16 @@ export async function onboard(opts: OnboardOptions): Promise<void> {
     p.log.step(pc.bold("LLM Provider"));
     llm = await promptLlm();
 
-    if (llm?.apiKey) {
+    if (llm?.apiKey || (llm?.provider === "openai" && llm.baseUrl)) {
       const s = p.spinner();
-      s.start("Validating API key...");
+      s.start("Validating LLM provider...");
       try {
         if (llm.provider === "claude") {
+          const apiKey = llm.apiKey ?? "";
           const res = await fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",
             headers: {
-              "x-api-key": llm.apiKey,
+              "x-api-key": apiKey,
               "anthropic-version": "2023-06-01",
               "content-type": "application/json",
             },
@@ -530,11 +537,11 @@ export async function onboard(opts: OnboardOptions): Promise<void> {
             s.stop(pc.yellow("Could not validate API key — continuing anyway"));
           }
         } else {
-          const res = await fetch("https://api.openai.com/v1/models", {
-            headers: { Authorization: `Bearer ${llm.apiKey}` },
-          });
+          const headers: Record<string, string> = {};
+          if (llm.apiKey) headers.Authorization = `Bearer ${llm.apiKey}`;
+          const res = await fetch(`${normalizeOpenAiBaseUrl(llm.baseUrl)}/models`, { headers });
           if (res.ok) {
-            s.stop("API key is valid");
+            s.stop(llm.baseUrl ? "OpenAI-compatible endpoint is reachable" : "API key is valid");
           } else if (res.status === 401) {
             s.stop(pc.yellow("API key appears invalid — you can update it later"));
           } else {

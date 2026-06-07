@@ -79,7 +79,7 @@ my-adapter/
 ## Choosing an Adapter
 
 - **Need a coding agent?** Use `claude_local`, `codex_local`, `opencode_local`, or install `hermes_local`/`droid_local` as an external plugin
-- **Need local models?** Use `codex_local` or `opencode_local`, enter a manual model id, and configure the local OpenAI-compatible endpoint for Ollama, FreeLLM, or another `/v1` server in the agent configuration.
+- **Need local models?** Use `codex_local` or `opencode_local`, enter a manual model id, and configure the local OpenAI-compatible endpoint for Ollama, FreeLLM, or another `/v1` server in the agent configuration. This fork defaults custom local endpoints to `http://localhost:3001/v1`.
 - **Need to run a script or command?** Use `process`
 - **Need to call an external service?** Use `http`
 - **Need something custom?** [Create your own adapter](/adapters/creating-an-adapter) or [build an external adapter plugin](/adapters/external-adapters)

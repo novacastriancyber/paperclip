@@ -24,4 +24,34 @@ describe("paperclip config schema", () => {
     expect(parsed.storage.localDisk.baseDir).toBe("~/.paperclip/instances/default/data/storage");
     expect(parsed.secrets.localEncrypted.keyFilePath).toBe("~/.paperclip/instances/default/secrets/master.key");
   });
+
+  it("accepts OpenAI-compatible local LLM endpoints", () => {
+    const parsed = paperclipConfigSchema.parse({
+      $meta: {
+        version: 1,
+        updatedAt: "2026-05-10T00:00:00.000Z",
+        source: "configure",
+      },
+      llm: {
+        provider: "openai",
+        baseUrl: "http://localhost:3001/v1",
+      },
+      database: {
+        mode: "embedded-postgres",
+      },
+      logging: {
+        mode: "file",
+      },
+      server: {},
+    });
+
+    expect(parsed.llm).toMatchObject({
+      provider: "openai",
+      baseUrl: "http://localhost:3001/v1",
+      chatCompletionsPath: "/v1/chat/completions",
+      responsesPath: "/v1/responses",
+      embeddingsPath: "/v1/embeddings",
+      embeddingModel: "auto",
+    });
+  });
 });

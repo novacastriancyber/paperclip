@@ -50,7 +50,9 @@ External plugin adapters (install via the adapter manager or API):
 
 For local CLI adapters (`claude_local`, `codex_local`, `opencode_local`, plugin-provided `hermes_local`, `droid_local`), Paperclip assumes the CLI is already installed and authenticated on the host machine.
 
-For Codex and OpenCode agents, the agent configuration form can also target local OpenAI-compatible model servers. Choose a manual model id, then set **Local model endpoint** to Ollama or a custom FreeLLM/OpenAI-compatible endpoint. Paperclip writes the corresponding `OPENAI_BASE_URL`, `OPENAI_API_BASE`, and optional `OPENAI_API_KEY` environment bindings into the adapter config.
+For Codex and OpenCode agents, the agent configuration form can also target local OpenAI-compatible model servers. Choose a manual model id, then set **Local model endpoint** to Ollama or a custom FreeLLM/OpenAI-compatible endpoint. Paperclip writes the corresponding `OPENAI_BASE_URL`, `OPENAI_API_BASE`, and optional `OPENAI_API_KEY` environment bindings into the adapter config. The fork default for custom local endpoints is `http://localhost:3001/v1`.
+
+Instance-level OpenAI-compatible LLM configuration supports the same local base URL. The default local paths are chat completions at `/v1/chat/completions`, Responses at `/v1/responses`, and embeddings at `/v1/embeddings` with embedding model `auto`.
 
 ## 3.2 Runtime behavior
 

@@ -18,6 +18,11 @@ export const configMetaSchema = z.object({
 export const llmConfigSchema = z.object({
   provider: z.enum(["claude", "openai"]),
   apiKey: z.string().optional(),
+  baseUrl: z.string().url().optional(),
+  chatCompletionsPath: z.string().regex(/^\//, "chatCompletionsPath must start with /").default("/v1/chat/completions"),
+  responsesPath: z.string().regex(/^\//, "responsesPath must start with /").default("/v1/responses"),
+  embeddingsPath: z.string().regex(/^\//, "embeddingsPath must start with /").default("/v1/embeddings"),
+  embeddingModel: z.string().min(1).default("auto"),
 });
 
 export const databaseBackupConfigSchema = z.object({

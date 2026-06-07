@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_CUSTOM_OPENAI_COMPATIBLE_BASE_URL,
   OLLAMA_OPENAI_BASE_URL,
   applyLocalModelEndpoint,
   inferLocalModelProvider,
@@ -19,11 +20,11 @@ describe("local model endpoint env helpers", () => {
   it("configures a custom FreeLLM/OpenAI-compatible endpoint", () => {
     const env = applyLocalModelEndpoint({}, {
       provider: "custom",
-      baseUrl: " http://localhost:8080/v1 ",
+      baseUrl: ` ${DEFAULT_CUSTOM_OPENAI_COMPATIBLE_BASE_URL} `,
     });
 
-    expect(readPlainEnvValue(env, "OPENAI_BASE_URL")).toBe("http://localhost:8080/v1");
-    expect(readPlainEnvValue(env, "OPENAI_API_BASE")).toBe("http://localhost:8080/v1");
+    expect(readPlainEnvValue(env, "OPENAI_BASE_URL")).toBe(DEFAULT_CUSTOM_OPENAI_COMPATIBLE_BASE_URL);
+    expect(readPlainEnvValue(env, "OPENAI_API_BASE")).toBe(DEFAULT_CUSTOM_OPENAI_COMPATIBLE_BASE_URL);
     expect(readPlainEnvValue(env, "OPENAI_API_KEY")).toBe("local");
     expect(inferLocalModelProvider(env)).toBe("custom");
   });
