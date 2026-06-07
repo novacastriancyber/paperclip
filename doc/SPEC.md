@@ -200,7 +200,7 @@ Agent configuration includes an **adapter** that defines how Paperclip invokes t
 | `pi_local` | Local Pi process | Pi CLI heartbeat worker |
 | `cursor` | Cursor API/CLI bridge | Cursor-integrated heartbeat worker |
 | `openclaw_gateway` | OpenClaw gateway API | Managed OpenClaw agent via gateway |
-| `hermes_local` | Local Hermes process | Hermes agent heartbeat worker |
+| `hermes_local` | External Hermes process plugin | Hermes agent heartbeat worker loaded through the adapter plugin manager |
 
 The `process` and `http` adapters ship as generic defaults. Additional built-in adapters cover common local coding runtimes (see list above), and new adapter types can be registered via the plugin system (see Plugin / Extension Architecture).
 

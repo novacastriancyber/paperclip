@@ -58,6 +58,14 @@ import { useDisabledAdaptersSync } from "../adapters/use-disabled-adapters";
 import { buildAgentUpdatePatch, type AgentConfigOverlay } from "../lib/agent-config-patch";
 import { useAdapterCapabilities } from "../adapters/use-adapter-capabilities";
 import { filterAcpxModelsByAgent } from "../lib/acpx-model-filter";
+import {
+  OLLAMA_OPENAI_BASE_URL,
+  applyLocalModelEndpoint,
+  inferLocalModelProvider,
+  readPlainEnvValue,
+  shouldReplaceLocalPlaceholderApiKey,
+  type LocalModelEndpointProvider,
+} from "../lib/local-model-endpoint";
 
 /* ---- Create mode values ---- */
 
@@ -113,6 +121,7 @@ const emptyOverlay: AgentConfigOverlay = {
 
 /** Stable empty object used as fallback for missing env config to avoid new-object-per-render. */
 const EMPTY_ENV: Record<string, EnvBinding> = {};
+const LOCAL_MODEL_ENDPOINT_ADAPTER_TYPES = new Set(["codex_local", "opencode_local"]);
 
 export function supportsAdapterModelRefresh(adapterType: string): boolean {
   return adapterType === "claude_local" || adapterType === "codex_local" || adapterType === "acpx_local";
@@ -366,8 +375,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
   const [refreshModelsError, setRefreshModelsError] = useState<string | null>(null);
   const [refreshingModels, setRefreshingModels] = useState(false);
   const rawModels = fetchedModels ?? externalModels ?? [];
-  const adapterCommandField =
-    adapterType === "hermes_local" ? "hermesCommand" : "command";
+  const adapterCommandField = "command";
   const acpxAgent =
     adapterType === "acpx_local"
       ? isCreate
@@ -417,6 +425,16 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
     models,
     hideInstructionsFile,
   };
+  const currentEnvBindings = isCreate
+    ? ((val!.envBindings ?? EMPTY_ENV) as Record<string, EnvBinding>)
+    : ((eff("adapterConfig", "env", (config.env ?? EMPTY_ENV) as Record<string, EnvBinding>)));
+  const setCurrentEnvBindings = (env: Record<string, EnvBinding>) => {
+    if (isCreate) {
+      set!({ envBindings: env ?? {}, envVars: "" });
+    } else {
+      mark("adapterConfig", "env", env);
+    }
+  };
 
   // Section toggle state — advanced always starts collapsed
   const [runPolicyAdvancedOpen, setRunPolicyAdvancedOpen] = useState(false);
@@ -452,17 +470,6 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
     }
     const base = config as Record<string, unknown>;
     const next = { ...base, ...overlay.adapterConfig };
-    if (adapterType === "hermes_local") {
-      const hermesCommand =
-        typeof next.hermesCommand === "string" && next.hermesCommand.length > 0
-          ? next.hermesCommand
-          : typeof next.command === "string" && next.command.length > 0
-            ? next.command
-            : undefined;
-      if (hermesCommand) {
-        next.hermesCommand = hermesCommand;
-      }
-    }
     return next;
   }
 
@@ -957,11 +964,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                       : eff(
                           "adapterConfig",
                           adapterCommandField,
-                          String(
-                            (adapterType === "hermes_local"
-                              ? config.hermesCommand ?? config.command
-                              : config.command) ?? "",
-                          ),
+                          String(config.command ?? ""),
                         )
                   }
                   onCommit={(v) =>
@@ -1101,6 +1104,13 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
               )}
               <uiAdapter.ConfigFields {...adapterFieldProps} />
 
+              {LOCAL_MODEL_ENDPOINT_ADAPTER_TYPES.has(adapterType) && (
+                <LocalModelEndpointFields
+                  env={currentEnvBindings}
+                  onChange={setCurrentEnvBindings}
+                />
+              )}
+
               <Field label="Extra args (comma-separated)" hint={help.extraArgs}>
                 <DraftInput
                   value={
@@ -1121,22 +1131,13 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
 
               <Field label="Environment variables" hint={help.envVars}>
                 <EnvVarEditor
-                  value={
-                    isCreate
-                      ? ((val!.envBindings ?? EMPTY_ENV) as Record<string, EnvBinding>)
-                      : ((eff("adapterConfig", "env", (config.env ?? EMPTY_ENV) as Record<string, EnvBinding>))
-                      )
-                  }
+                  value={currentEnvBindings}
                   secrets={availableSecrets}
                   onCreateSecret={async (name, value) => {
                     const created = await createSecret.mutateAsync({ name, value });
                     return created;
                   }}
-                  onChange={(env) =>
-                    isCreate
-                      ? set!({ envBindings: env ?? {}, envVars: "" })
-                      : mark("adapterConfig", "env", env)
-                  }
+                  onChange={(env) => setCurrentEnvBindings(env ?? {})}
                 />
               </Field>
 
@@ -1408,6 +1409,81 @@ function ExperimentalBadge() {
     <span className="shrink-0 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-700 dark:text-amber-200">
       Experimental
     </span>
+  );
+}
+
+function LocalModelEndpointFields({
+  env,
+  onChange,
+}: {
+  env: Record<string, EnvBinding>;
+  onChange: (env: Record<string, EnvBinding>) => void;
+}) {
+  const provider = inferLocalModelProvider(env);
+  const baseUrl = readPlainEnvValue(env, "OPENAI_BASE_URL") || readPlainEnvValue(env, "OPENAI_API_BASE");
+  const apiKey = readPlainEnvValue(env, "OPENAI_API_KEY");
+
+  function updateProvider(nextProvider: LocalModelEndpointProvider) {
+    onChange(applyLocalModelEndpoint(env, {
+      provider: nextProvider,
+      baseUrl,
+    }));
+  }
+
+  function updateBaseUrl(nextBaseUrl: string) {
+    onChange(applyLocalModelEndpoint(env, {
+      provider: "custom",
+      baseUrl: nextBaseUrl,
+      apiKey: shouldReplaceLocalPlaceholderApiKey(env) ? "local" : undefined,
+    }));
+  }
+
+  function updateApiKey(nextApiKey: string) {
+    onChange(applyLocalModelEndpoint(env, {
+      provider: provider === "none" ? "custom" : provider,
+      baseUrl: provider === "ollama" ? OLLAMA_OPENAI_BASE_URL : baseUrl,
+      apiKey: nextApiKey,
+    }));
+  }
+
+  return (
+    <div className="rounded-md border border-border p-3 space-y-3">
+      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Local model endpoint</div>
+      <Field label="Provider" hint={help.localModelProvider}>
+        <select
+          className={inputClass}
+          value={provider}
+          onChange={(event) => updateProvider(event.target.value as LocalModelEndpointProvider)}
+        >
+          <option value="none">None</option>
+          <option value="ollama">Ollama</option>
+          <option value="custom">FreeLLM / OpenAI-compatible</option>
+        </select>
+      </Field>
+      {provider !== "none" && (
+        <>
+          <Field label="Base URL" hint={help.localModelBaseUrl}>
+            <DraftInput
+              value={provider === "ollama" ? OLLAMA_OPENAI_BASE_URL : baseUrl}
+              onCommit={updateBaseUrl}
+              immediate
+              disabled={provider === "ollama"}
+              className={cn(inputClass, provider === "ollama" && "opacity-70")}
+              placeholder="http://localhost:8080/v1"
+            />
+          </Field>
+          <Field label="API key" hint={help.localModelApiKey}>
+            <DraftInput
+              value={apiKey}
+              onCommit={updateApiKey}
+              immediate
+              className={inputClass}
+              placeholder={provider === "ollama" ? "ollama" : "local"}
+            />
+          </Field>
+        </>
+      )}
+    </div>
   );
 }
 

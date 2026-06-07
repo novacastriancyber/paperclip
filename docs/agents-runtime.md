@@ -39,7 +39,7 @@ Built-in adapters:
 - `opencode_local`: runs your local `opencode` CLI
 - `cursor`: runs Cursor in background mode
 - `pi_local`: runs an embedded Pi agent locally
-- `hermes_local`: runs your local `hermes` CLI (`hermes-paperclip-adapter`)
+- `hermes_local`: available through an external adapter plugin, not bundled in core
 - `openclaw_gateway`: connects to an OpenClaw gateway endpoint
 - `process`: generic shell command adapter
 - `http`: calls an external HTTP endpoint
@@ -48,7 +48,9 @@ External plugin adapters (install via the adapter manager or API):
 
 - `droid_local`: runs your local Factory Droid CLI (`@henkey/droid-paperclip-adapter`)
 
-For local CLI adapters (`claude_local`, `codex_local`, `opencode_local`, `hermes_local`, `droid_local`), Paperclip assumes the CLI is already installed and authenticated on the host machine.
+For local CLI adapters (`claude_local`, `codex_local`, `opencode_local`, plugin-provided `hermes_local`, `droid_local`), Paperclip assumes the CLI is already installed and authenticated on the host machine.
+
+For Codex and OpenCode agents, the agent configuration form can also target local OpenAI-compatible model servers. Choose a manual model id, then set **Local model endpoint** to Ollama or a custom FreeLLM/OpenAI-compatible endpoint. Paperclip writes the corresponding `OPENAI_BASE_URL`, `OPENAI_API_BASE`, and optional `OPENAI_API_KEY` environment bindings into the adapter config.
 
 ## 3.2 Runtime behavior
 
@@ -177,7 +179,7 @@ Start with least privilege where possible, and avoid exposing secrets in broad r
 
 ## 10. Minimal setup checklist
 
-1. Choose adapter (e.g. `claude_local`, `codex_local`, `opencode_local`, `hermes_local`, `cursor`, or `openclaw_gateway`). External plugins like `droid_local` are also available via the adapter manager.
+1. Choose adapter (e.g. `claude_local`, `codex_local`, `opencode_local`, `cursor`, or `openclaw_gateway`). External plugins like `hermes_local` and `droid_local` are also available via the adapter manager.
 2. Set `cwd` to the target workspace (for local adapters).
 3. Optionally add a prompt template (`promptTemplate`) or use the managed instructions bundle.
 4. Configure heartbeat policy (timer and/or assignment wakeups).
