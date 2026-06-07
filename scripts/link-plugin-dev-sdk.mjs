@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync, lstatSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, lstatSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,8 +19,15 @@ mkdirSync(scopeDir, { recursive: true });
 
 try {
   const stat = lstatSync(linkTarget);
-  if (stat.isSymbolicLink()) {
-    rmSync(linkTarget, { force: true });
+  const pointsToLocalSdk = (() => {
+    try {
+      return realpathSync(linkTarget) === realpathSync(sdkDir);
+    } catch {
+      return false;
+    }
+  })();
+  if (stat.isSymbolicLink() || pointsToLocalSdk) {
+    rmSync(linkTarget, { force: true, recursive: true });
   } else {
     console.log("  i Keeping existing installed @paperclipai/plugin-sdk directory in place");
     process.exit(0);
@@ -29,7 +36,7 @@ try {
   // target does not exist yet
 }
 
-const relativeSdkDir = relative(scopeDir, sdkDir);
-symlinkSync(relativeSdkDir, linkTarget, "dir");
+const linkSource = process.platform === "win32" ? sdkDir : relative(scopeDir, sdkDir);
+symlinkSync(linkSource, linkTarget, process.platform === "win32" ? "junction" : "dir");
 
 console.log(`  ✓ Linked local @paperclipai/plugin-sdk for ${packageDir}`);
