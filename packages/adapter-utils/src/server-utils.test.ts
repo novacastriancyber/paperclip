@@ -10,6 +10,7 @@ import {
   buildRuntimeMountedSkillSnapshot,
   buildInvocationEnvForLogs,
   DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE,
+  ensurePaperclipSkillSymlink,
   materializePaperclipSkillCopy,
   refreshPaperclipWorkspaceEnvForExecution,
   renderPaperclipWakePrompt,
@@ -49,6 +50,26 @@ async function waitForTextMatch(read: () => string, pattern: RegExp, timeoutMs =
   }
   return read().match(pattern);
 }
+
+describe("ensurePaperclipSkillSymlink", () => {
+  it("creates a readable skill mount", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), `paperclip-skill-link-${randomUUID()}-`));
+    const source = path.join(root, "source", "paperclip");
+    const target = path.join(root, "target", "paperclip");
+    await fs.mkdir(source, { recursive: true });
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.writeFile(path.join(source, "SKILL.md"), "# Paperclip\n");
+
+    try {
+      await expect(ensurePaperclipSkillSymlink(source, target)).resolves.toBe("created");
+      await expect(fs.readFile(path.join(target, "SKILL.md"), "utf8")).resolves.toBe(
+        "# Paperclip\n",
+      );
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("buildInvocationEnvForLogs", () => {
   it("redacts inline secrets from resolved command metadata", () => {

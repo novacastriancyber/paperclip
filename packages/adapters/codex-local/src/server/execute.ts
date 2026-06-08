@@ -25,6 +25,7 @@ import {
   parseObject,
   buildPaperclipEnv,
   buildInvocationEnvForLogs,
+  createPaperclipSkillLink,
   ensureAbsoluteDirectory,
   ensurePaperclipSkillSymlink,
   ensurePathInEnv,
@@ -250,7 +251,7 @@ export async function ensureCodexSkillsInjected(
           if (linkSkill) {
             await linkSkill(entry.source, target);
           } else {
-            await fs.symlink(entry.source, target);
+            await createPaperclipSkillLink(entry.source, target);
           }
           await onLog(
             "stdout",

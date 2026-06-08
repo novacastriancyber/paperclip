@@ -1797,8 +1797,7 @@ export function writePaperclipSkillSyncPreference(
 export async function ensurePaperclipSkillSymlink(
   source: string,
   target: string,
-  linkSkill: (source: string, target: string) => Promise<void> = (linkSource, linkTarget) =>
-    fs.symlink(linkSource, linkTarget),
+  linkSkill: (source: string, target: string) => Promise<void> = createPaperclipSkillLink,
 ): Promise<"created" | "repaired" | "skipped"> {
   const existing = await fs.lstat(target).catch(() => null);
   if (!existing) {
@@ -1826,6 +1825,33 @@ export async function ensurePaperclipSkillSymlink(
   await fs.unlink(target);
   await linkSkill(source, target);
   return "repaired";
+}
+
+export async function createPaperclipSkillLink(source: string, target: string): Promise<void> {
+  const symlinkType: "dir" | "junction" = process.platform === "win32" ? "junction" : "dir";
+
+  try {
+    await fs.symlink(source, target, symlinkType);
+  } catch (err) {
+    if (!shouldCopySkillAfterSymlinkFailure(err)) {
+      throw err;
+    }
+
+    await fs.rm(target, { recursive: true, force: true }).catch(() => undefined);
+    await fs.cp(source, target, {
+      recursive: true,
+      force: true,
+      errorOnExist: false,
+      dereference: false,
+    });
+  }
+}
+
+function shouldCopySkillAfterSymlinkFailure(err: unknown): boolean {
+  if (process.platform !== "win32") return false;
+  if (!(err instanceof Error)) return false;
+  const code = (err as NodeJS.ErrnoException).code;
+  return code === "EPERM" || code === "EACCES";
 }
 
 async function hashSkillDirectory(root: string): Promise<string> {

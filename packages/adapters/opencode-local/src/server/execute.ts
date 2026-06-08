@@ -31,6 +31,7 @@ import {
   buildPaperclipEnv,
   joinPromptSections,
   buildInvocationEnvForLogs,
+  createPaperclipSkillLink,
   ensureAbsoluteDirectory,
   ensurePaperclipSkillSymlink,
   ensurePathInEnv,
@@ -189,7 +190,7 @@ async function buildOpenCodeSkillsDir(config: Record<string, unknown>): Promise<
   const desiredNames = new Set(resolvePaperclipDesiredSkillNames(config, availableEntries));
   for (const entry of availableEntries) {
     if (!desiredNames.has(entry.key)) continue;
-    await fs.symlink(entry.source, path.join(target, entry.runtimeName));
+    await createPaperclipSkillLink(entry.source, path.join(target, entry.runtimeName));
   }
   return target;
 }

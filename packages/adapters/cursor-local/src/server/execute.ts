@@ -30,6 +30,7 @@ import {
   parseObject,
   buildPaperclipEnv,
   buildInvocationEnvForLogs,
+  createPaperclipSkillLink,
   ensureAbsoluteDirectory,
   ensurePaperclipSkillSymlink,
   ensurePathInEnv,
@@ -125,7 +126,7 @@ async function buildCursorSkillsDir(config: Record<string, unknown>): Promise<st
   const desiredNames = new Set(resolvePaperclipDesiredSkillNames(config, availableEntries));
   for (const entry of availableEntries) {
     if (!desiredNames.has(entry.key)) continue;
-    await fs.symlink(entry.source, path.join(target, entry.runtimeName));
+    await createPaperclipSkillLink(entry.source, path.join(target, entry.runtimeName));
   }
   return target;
 }
@@ -173,7 +174,7 @@ export async function ensureCursorSkillsInjected(
       `[paperclip] Removed maintainer-only Cursor skill "${skillName}" from ${skillsHome}\n`,
     );
   }
-  const linkSkill = options.linkSkill ?? ((source: string, target: string) => fs.symlink(source, target));
+  const linkSkill = options.linkSkill ?? createPaperclipSkillLink;
   for (const entry of skillsEntries) {
     const target = path.join(skillsHome, entry.runtimeName);
     try {
