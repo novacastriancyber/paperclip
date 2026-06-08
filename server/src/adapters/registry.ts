@@ -127,6 +127,7 @@ import {
 } from "@paperclipai/adapter-pi-local";
 import { BUILTIN_ADAPTER_TYPES } from "./builtin-adapter-types.js";
 import { buildExternalAdapters } from "./plugin-loader.js";
+import { readConfigFile } from "../config-file.js";
 import { getDisabledAdapterTypes } from "../services/adapter-plugin-store.js";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
@@ -190,6 +191,47 @@ function prefixAdapterModelLabels(models: AdapterModel[], provider: "Claude" | "
   }));
 }
 
+function readStringEnvValue(env: Record<string, unknown>, key: string): string {
+  const value = env[key];
+  if (typeof value === "string") return value.trim();
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return "";
+  const record = value as Record<string, unknown>;
+  return record.type === "plain" && typeof record.value === "string" ? record.value.trim() : "";
+}
+
+export function withOpenAiCompatibleLlmDefaults(config: Record<string, unknown>): Record<string, unknown> {
+  const fileConfig = readConfigFile();
+  const llm = fileConfig?.llm;
+  if (llm?.provider !== "openai" || !llm.baseUrl) return config;
+
+  const env = typeof config.env === "object" && config.env !== null && !Array.isArray(config.env)
+    ? { ...(config.env as Record<string, unknown>) }
+    : {};
+
+  const baseUrl = llm.baseUrl.trim().replace(/\/+$/, "");
+  if (!readStringEnvValue(env, "OPENAI_BASE_URL")) {
+    env.OPENAI_BASE_URL = baseUrl;
+  }
+  if (!readStringEnvValue(env, "OPENAI_API_BASE")) {
+    env.OPENAI_API_BASE = baseUrl;
+  }
+  if (llm.apiKey?.trim() && !readStringEnvValue(env, "OPENAI_API_KEY")) {
+    env.OPENAI_API_KEY = llm.apiKey.trim();
+  }
+
+  return { ...config, env };
+}
+
+async function executeWithOpenAiCompatibleLlmDefaults(
+  execute: NonNullable<ServerAdapterModule["execute"]>,
+  ctx: Parameters<NonNullable<ServerAdapterModule["execute"]>>[0],
+) {
+  return execute({
+    ...ctx,
+    config: withOpenAiCompatibleLlmDefaults(ctx.config),
+  });
+}
+
 async function listAcpxModels(): Promise<AdapterModel[]> {
   const [claude, codex] = await Promise.all([
     listClaudeModels().catch(() => claudeModels),
@@ -247,7 +289,7 @@ const acpxLocalAdapter: ServerAdapterModule = {
 
 const codexLocalAdapter: ServerAdapterModule = {
   type: "codex_local",
-  execute: codexExecute,
+  execute: (ctx) => executeWithOpenAiCompatibleLlmDefaults(codexExecute, ctx),
   testEnvironment: codexTestEnvironment,
   listSkills: listCodexSkills,
   syncSkills: syncCodexSkills,
@@ -353,7 +395,7 @@ const openclawGatewayAdapter: ServerAdapterModule = {
 
 const openCodeLocalAdapter: ServerAdapterModule = {
   type: "opencode_local",
-  execute: openCodeExecute,
+  execute: (ctx) => executeWithOpenAiCompatibleLlmDefaults(openCodeExecute, ctx),
   testEnvironment: openCodeTestEnvironment,
   listSkills: listOpenCodeSkills,
   syncSkills: syncOpenCodeSkills,

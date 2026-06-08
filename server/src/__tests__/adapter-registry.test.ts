@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { buildSandboxNpmInstallCommand } from "@paperclipai/adapter-utils";
 import type { ServerAdapterModule } from "../adapters/index.js";
+import { readConfigFile } from "../config-file.js";
 
 import {
   detectAdapterModel,
@@ -15,7 +16,12 @@ import {
 import {
   resolveExternalAdapterRegistration,
   setOverridePaused,
+  withOpenAiCompatibleLlmDefaults,
 } from "../adapters/registry.js";
+
+vi.mock("../config-file.js", () => ({
+  readConfigFile: vi.fn(() => null),
+}));
 
 const externalAdapter: ServerAdapterModule = {
   type: "external_test",
@@ -39,6 +45,7 @@ describe("server adapter registry", () => {
     unregisterServerAdapter("external_test");
     unregisterServerAdapter("claude_local");
     setOverridePaused("claude_local", false);
+    vi.mocked(readConfigFile).mockReturnValue(null);
   });
 
   afterEach(() => {
@@ -289,6 +296,57 @@ describe("server adapter registry", () => {
     expect(() => requireServerAdapter("hermes_local")).toThrow(
       "Unknown adapter type: hermes_local",
     );
+  });
+
+  it("injects instance OpenAI-compatible LLM defaults into local adapter env", () => {
+    vi.mocked(readConfigFile).mockReturnValue({
+      llm: {
+        provider: "openai",
+        baseUrl: "http://localhost:3001/v1/",
+        apiKey: "local-test-key",
+        chatCompletionsPath: "/v1/chat/completions",
+        responsesPath: "/v1/responses",
+        embeddingsPath: "/v1/embeddings",
+        embeddingModel: "auto",
+      },
+    } as ReturnType<typeof readConfigFile>);
+
+    expect(withOpenAiCompatibleLlmDefaults({ model: "openai/gpt-5.2-codex" })).toEqual({
+      model: "openai/gpt-5.2-codex",
+      env: {
+        OPENAI_BASE_URL: "http://localhost:3001/v1",
+        OPENAI_API_BASE: "http://localhost:3001/v1",
+        OPENAI_API_KEY: "local-test-key",
+      },
+    });
+  });
+
+  it("does not override explicit local adapter OpenAI-compatible env", () => {
+    vi.mocked(readConfigFile).mockReturnValue({
+      llm: {
+        provider: "openai",
+        baseUrl: "http://localhost:3001/v1",
+        apiKey: "local-test-key",
+        chatCompletionsPath: "/v1/chat/completions",
+        responsesPath: "/v1/responses",
+        embeddingsPath: "/v1/embeddings",
+        embeddingModel: "auto",
+      },
+    } as ReturnType<typeof readConfigFile>);
+
+    expect(withOpenAiCompatibleLlmDefaults({
+      env: {
+        OPENAI_BASE_URL: "http://custom.local/v1",
+        OPENAI_API_BASE: { type: "plain", value: "http://custom.local/v1" },
+        OPENAI_API_KEY: { type: "plain", value: "explicit-key" },
+      },
+    })).toEqual({
+      env: {
+        OPENAI_BASE_URL: "http://custom.local/v1",
+        OPENAI_API_BASE: { type: "plain", value: "http://custom.local/v1" },
+        OPENAI_API_KEY: { type: "plain", value: "explicit-key" },
+      },
+    });
   });
 });
 
